@@ -63,3 +63,18 @@ Production output is `dist/`. Cloudflare deployment, DNS, the custom domain, PWA
 - Earth imagery downloaded from the [Three.js example textures](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets). Verify additional image attribution requirements before public release.
 
 Three.js and Satellite.js license notices are included in `THIRD_PARTY_NOTICES.txt`.
+
+## Cloudflare Pages deployment
+
+Connect the private GitHub repository jessdoctrine/orbit.watch using Cloudflare Pages Git integration. Use these settings:
+
+- Project name: orbit-watch (if available)
+- Production branch: main
+- Framework preset: None
+- Build command: npm run build
+- Build output directory: dist
+- Root directory: repository root (leave blank)
+- Node.js: .node-version selects 22.23.4
+
+The catalog snapshot is committed and served as a static asset. No credentials, database bindings, or build-time data downloads are required. The 16.4 MB catalog is below Cloudflare Pages' documented 25 MiB single-asset limit. Connecting GitHub enables new deployments on pushes to main. Deployment is not complete until the Cloudflare dashboard reports success and the assigned pages.dev address is verified. Custom domain and DNS configuration are a separate step.
+
