@@ -1,25 +1,30 @@
 export const categories = [
-  {id:'starlink',name:'Starlink',description:'Internet constellation concept',color:'#55bfff'},
-  {id:'satellite',name:'Other satellites',description:'Science, navigation & imaging',color:'#a38bff'},
-  {id:'debris',name:'Space debris',description:'Fragments & discarded objects',color:'#ff8174'},
-  {id:'rocket',name:'Rocket bodies',description:'Spent launch hardware',color:'#efc272'},
-  {id:'station',name:'Space stations',description:'Crewed orbital platforms',color:'#66debd'},
+ {id:'starlink',name:'Starlink',description:'Internet constellation',color:'#55bfff'},
+ {id:'satellite',name:'Other satellites',description:'Other cataloged payloads',color:'#a38bff'},
+ {id:'debris',name:'Space debris',description:'Cataloged fragments & objects',color:'#ff8174'},
+ {id:'rocket',name:'Rocket bodies',description:'Cataloged launch hardware',color:'#efc272'},
+ {id:'station',name:'Space stations',description:'ISS & Tiangong core',color:'#66debd'},
+ {id:'unknown',name:'Unclassified',description:'Object type unavailable',color:'#b8c6d4'},
 ];
-// Deliberately fictional: these entries are not associated with real catalog IDs.
-const templates = [
- ['starlink','Starlink concept','Example internet operator','Internet connectivity','Example country',550,53],
- ['satellite','Aurora imaging','Example Earth observatory','Earth observation','Example country',710,98],
- ['satellite','Meridian navigation','Example navigation operator','Navigation research','Example country',1200,65],
- ['debris','Fragment','Unknown','Illustrative debris object','Unknown',850,78],
- ['rocket','Upper stage','Example launch operator','Spent launch hardware','Example country',1000,42],
- ['station','Horizon station','Example research partnership','Crewed research platform','International example',420,52],
-];
-const explanations = [
- ['Communications satellite', 'An example of a satellite in an internet constellation.', 'Relays internet signals between ground equipment and the wider network.'],
- ['Earth observation satellite', 'An example of a satellite carrying Earth-imaging instruments.', 'Collects images that can support mapping, environmental monitoring, and disaster assessment.'],
- ['Navigation satellite', 'An example of a satellite carrying timing and positioning equipment.', 'Broadcasts signals that receivers can use to estimate their position and time.'],
- ['Debris fragment', 'An example of a detached fragment from spacecraft or launch hardware. Its original source is unknown in this demo.', 'Has no active mission. It remains in orbit as a piece of space debris.'],
- ['Spent rocket upper stage', 'An example of a rocket section left in orbit after deploying its payload.', 'Originally helped carry a payload into orbit. It no longer performs an active mission in this example.'],
- ['Crewed space station', 'An example of an orbital platform designed to support astronauts.', 'Provides a place to live and work while conducting research in microgravity.'],
-];
-export const catalog=Array.from({length:180},(_,i)=>{const t=templates[i%templates.length],e=explanations[i%templates.length];return {id:`DEMO-${String(i+1).padStart(4,'0')}`,category:t[0],name:`${t[1]} ${String(i+1).padStart(3,'0')}`,operator:t[2],purpose:t[3],country:t[4],altitude:t[5]+(i%7)*12,inclination:t[6],year:String(2020+i%6),phase:i*2.399963,plane:i*1.618,type:e[0],description:e[1],activity:e[2]};});
+export function classify(omm,meta) {
+ if(meta.OBJECT_TYPE==='DEB')return 'debris';
+ if(meta.OBJECT_TYPE==='R/B')return 'rocket';
+ if([25544,48274].includes(Number(omm.NORAD_CAT_ID)))return 'station';
+ if(/^STARLINK-/.test(omm.OBJECT_NAME)&&meta.OBJECT_TYPE==='PAY')return 'starlink';
+ if(meta.OBJECT_TYPE==='PAY')return 'satellite';
+ return 'unknown';
+}
+const descriptions={
+ starlink:['Communications satellite','A cataloged satellite in the Starlink constellation.','The constellation provides broadband internet connectivity. This describes the constellation, not this satellite’s current operating state.'],
+ satellite:['Satellite / payload','An object classified as a payload in the CelesTrak catalog.','Its specific mission is not supplied by this orbital feed. The catalog link below can help identify it.'],
+ debris:['Debris','An object classified as debris in the CelesTrak catalog.','Debris has no intended active mission. The feed does not identify the exact material or origin of every fragment.'],
+ rocket:['Rocket body','A cataloged rocket body left in orbit after a launch.','Launch hardware used to deliver a payload. Its present operating state is not established by orbital elements.'],
+ station:['Space station','A cataloged core object of a space station.','Supports crewed operations and research in orbit. Docked vehicles and modules may have separate catalog entries.'],
+ unknown:['Unclassified object','An object with orbital elements but no supported type classification in the joined catalog.','Its purpose is not available from this source.'],
+};
+export function makeObject(record,index){
+ const {omm,meta}=record,category=classify(omm,meta),[type,description,activity]=descriptions[category];
+ return {index,id:String(omm.NORAD_CAT_ID),name:omm.OBJECT_NAME||`NORAD ${omm.NORAD_CAT_ID}`,category,type,description,activity,
+ owner:meta.OWNER||'Unknown',status:meta.OPS_STATUS_CODE||'Unknown',launch:meta.LAUNCH_DATE||'Unknown',year:meta.LAUNCH_DATE?.slice(0,4)||'',
+ internationalId:omm.OBJECT_ID||'Unknown',epoch:omm.EPOCH.endsWith('Z')?omm.EPOCH:omm.EPOCH+'Z',inclination:Number(omm.INCLINATION),period:1440/Number(omm.MEAN_MOTION),altitude:null,omm,meta};
+}

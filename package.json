@@ -1,15 +1,17 @@
 {
   "name": "orbit-watch",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --test src/*.test.js"
+    "test": "node --test src/*.test.js",
+    "data:update": "python scripts/update_data.py"
   },
   "dependencies": {
+    "satellite.js": "6.0.2",
     "three": "^0.187.0"
   },
   "devDependencies": {
