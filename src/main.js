@@ -2,6 +2,7 @@ import './style.css';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {catalog,categories} from './catalog.js';
+import {pickObject} from './picking.js';
 
 const $=s=>document.querySelector(s);
 const enabled=new Set(categories.map(c=>c.id));
@@ -10,7 +11,7 @@ const category=id=>categories.find(c=>c.id===id);
 const meshes=[];
 let scene,camera,renderer,controls,earth,orbitLine;
 function select(object){selected=object; const c=category(object.category);
- $('#detail').innerHTML=`<div class="object-icon" style="--color:${c.color}" aria-hidden="true">${object.category==='station'?'✧':'⌁'}</div><h2>${object.name}</h2><span class="demo-tag">FICTIONAL DEMO OBJECT</span><p class="detail-purpose"><span class="dot" style="--color:${c.color}"></span> ${c.name}<br>${object.purpose}</p><dl>${[['Operator',object.operator],['Country',object.country],['Demo altitude',object.altitude+' km'],['Demo inclination',object.inclination+'°'],['Demo launch year',object.year],['Demo ID',object.id]].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+ $('#detail').innerHTML=`<div class="object-icon" style="--color:${c.color}" aria-hidden="true">${object.category==='station'?'✧':'⌁'}</div><h2>${object.name}</h2><span class="demo-tag">FICTIONAL DEMO OBJECT</span><p class="detail-purpose"><span class="dot" style="--color:${c.color}"></span> ${object.type}</p><section class="object-explanation"><h3>What it is</h3><p>${object.description}</p><h3>What it does</h3><p>${object.activity}</p></section><dl>${[['Operator',object.operator],['Country',object.country],['Demo altitude',object.altitude+' km'],['Demo inclination',object.inclination+'°'],['Demo launch year',object.year],['Demo ID',object.id]].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
  renderRows();
  if(scene){if(orbitLine){scene.remove(orbitLine);orbitLine.geometry.dispose();orbitLine.material.dispose();}const points=Array.from({length:181},(_,i)=>position(object,i/180*Math.PI*2));orbitLine=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:c.color,transparent:true,opacity:0.4}));orbitLine.visible=enabled.has(object.category);scene.add(orbitLine);}
 }
@@ -40,7 +41,13 @@ try{
  const stars=[];let seed=13;const rand=()=>{seed=(seed*16807)%2147483647;return(seed-1)/2147483646;};for(let i=0;i<1400;i++){const v=new THREE.Vector3(rand()-.5,rand()-.5,rand()-.5).normalize().multiplyScalar(25);stars.push(v.x,v.y,v.z);}const starGeo=new THREE.BufferGeometry();starGeo.setAttribute('position',new THREE.Float32BufferAttribute(stars,3));scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({color:0x91b0ca,size:0.018,transparent:true,opacity:0.55})));
  const geometry=new THREE.SphereGeometry(0.009,8,6);for(const o of catalog){const m=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:category(o.category).color}));m.userData=o;m.position.copy(position(o,o.phase));meshes.push(m);scene.add(m);}
  const resize=()=>{const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();};new ResizeObserver(resize).observe(host);resize();
- const raycaster=new THREE.Raycaster();let down;
- host.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);host.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;const rect=host.getBoundingClientRect();raycaster.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),camera);const hit=raycaster.intersectObjects([earth,...meshes.filter(m=>m.visible)])[0];if(hit&&hit.object!==earth)select(hit.object.userData);});
+ let down;
+ const tooltip=document.createElement('div');tooltip.className='object-tooltip';tooltip.hidden=true;host.appendChild(tooltip);
+ const pick=e=>{const rect=host.getBoundingClientRect();return pickObject({meshes,camera,earth,width:rect.width,height:rect.height,x:e.clientX-rect.left,y:e.clientY-rect.top,radius:e.pointerType==='touch'?22:12});};
+ host.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];tooltip.hidden=true;});
+ host.addEventListener('pointermove',e=>{if(e.buttons)return;const hit=pick(e);host.style.cursor=hit?'pointer':'grab';tooltip.hidden=!hit;if(hit){const rect=host.getBoundingClientRect();tooltip.textContent=`${hit.userData.name} · ${hit.userData.type}`;tooltip.style.left=`${Math.min(e.clientX-rect.left+14,Math.max(8,rect.width-240))}px`;tooltip.style.top=`${Math.max(8,e.clientY-rect.top-40)}px`;}});
+ host.addEventListener('pointerleave',()=>{tooltip.hidden=true;});
+ host.addEventListener('pointercancel',()=>{down=null;tooltip.hidden=true;});
+ host.addEventListener('pointerup',e=>{const start=down;down=null;if(!start||Math.hypot(e.clientX-start[0],e.clientY-start[1])>6)return;const hit=pick(e);if(hit){select(hit.userData);tooltip.hidden=true;}});
  select(selected);let elapsed=0,last=performance.now();renderer.setAnimationLoop(now=>{const dt=Math.min((now-last)/1000,.05);last=now;if(!paused){elapsed+=dt*.06;earth.rotation.y+=dt*.018;grid.rotation.y=earth.rotation.y;meshes.forEach(m=>m.position.copy(position(m.userData,m.userData.phase+elapsed/Math.pow(1+m.userData.altitude/6371,1.5))));}controls.update();for(const m of meshes)m.scale.setScalar(m.userData.id===selected.id?2:1);renderer.render(scene,camera);});
 }catch(error){console.error(error);$('#globe-error').hidden=false;}

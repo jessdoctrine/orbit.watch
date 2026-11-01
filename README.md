@@ -36,3 +36,10 @@ The static production output is `dist/`. Cloudflare deployment, DNS changes, the
 ## Third-party asset
 
 The Earth texture was downloaded from the [Three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets). Three.js is MIT licensed; its license is included in `THIRD_PARTY_NOTICES.txt`. Verify any additional image attribution requirements before public release.
+
+## Object inspector
+
+Select a globe dot or a directory entry to see what the example object is and what it does. Pointer selection allows a 12-pixel margin (22 pixels on touch), excludes hidden layers, and rejects objects obscured by Earth. Hover shows an object label. Debris and spent stages are described as having no active mission in these examples.
+
+Run selection checks with `npm test`.
+

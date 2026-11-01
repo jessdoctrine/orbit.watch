@@ -2,3 +2,6 @@
 
 .table-wrap{max-height:420px;overflow:auto}thead{position:sticky;top:0;background:#0c1520;z-index:1}
 
+
+.object-explanation h3{font-size:11px;color:#c2d8e5;font-weight:600;margin:18px 0 6px}.object-explanation p{font-size:12px;line-height:1.65;color:#8ea6b9;margin:0}.object-tooltip{position:absolute;z-index:2;pointer-events:none;max-width:230px;padding:9px 12px;border:1px solid #395368;border-radius:6px;background:#0a1723ee;color:#daeaf4;font-size:11px;line-height:1.5}.details .object-icon{height:60px}
+
