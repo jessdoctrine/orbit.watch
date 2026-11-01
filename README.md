@@ -77,4 +77,3 @@ Connect the private GitHub repository jessdoctrine/orbit.watch using Cloudflare 
 - Node.js: .node-version selects 22.23.4
 
 The catalog snapshot is committed and served as a static asset. No credentials, database bindings, or build-time data downloads are required. The 16.4 MB catalog is below Cloudflare Pages' documented 25 MiB single-asset limit. Connecting GitHub enables new deployments on pushes to main. Deployment is not complete until the Cloudflare dashboard reports success and the assigned pages.dev address is verified. Custom domain and DNS configuration are a separate step.
-
