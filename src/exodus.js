@@ -12,11 +12,22 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  const points=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({vertexColors:true,size:5,sizeAttenuation:false,depthTest:true}));
  points.visible=false;scene.add(points);
  let active=false,controller=null,refreshToken=0,lastRefresh=0,aircraft=[],selectedIndex=-1,visibleAircraft=[];
- const raycaster=new THREE.Raycaster();raycaster.params.Points.threshold=.035;
- const pointer=new THREE.Vector2();
- const selection=new THREE.Mesh(new THREE.SphereGeometry(.012,12,8),new THREE.MeshBasicMaterial({color:0xffffff,depthTest:true}));selection.visible=false;scene.add(selection);
+ const raycaster=new THREE.Raycaster();
+ const projected=new THREE.Vector3(),world=new THREE.Vector3(),direction=new THREE.Vector3();
+ const selectedColor=new THREE.Color('#ffffff');
+ const palette={business:new THREE.Color('#f4c978'),agricultural:new THREE.Color('#96d4f4'),other:new THREE.Color('#7de3cf')};
+ function colorSelected(index,isSelected){
+  const attribute=points.geometry.getAttribute('color');
+  if(!attribute||index<0||index>=visibleAircraft.length)return;
+  const color=isSelected?selectedColor:palette[classifyAircraft(visibleAircraft[index].t)];
+  attribute.setXYZ(index,color.r,color.g,color.b);
+  attribute.needsUpdate=true;
+ }
+ function clearSelection(){
+  colorSelected(selectedIndex,false);selectedIndex=-1;
+ }
  const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- function clear(){points.geometry.dispose();points.geometry=new THREE.BufferGeometry();aircraft=[];visibleAircraft=[];selectedIndex=-1;selection.visible=false;}
+ function clear(){points.geometry.dispose();points.geometry=new THREE.BufferGeometry();aircraft=[];visibleAircraft=[];selectedIndex=-1;}
  // Match the Orbit Watch texture convention: longitude 0 is +X; east is -Z.
  function coord(lat,lon){const phi=lat*Math.PI/180,lambda=lon*Math.PI/180;return [1.045*Math.cos(phi)*Math.cos(lambda),1.045*Math.sin(phi),-1.045*Math.cos(phi)*Math.sin(lambda)];}
  function focus(region){const distance=camera.position.length();const center=new THREE.Vector3(...coord(region.lat,region.lon)).normalize();camera.position.copy(center.multiplyScalar(distance));controls.target.set(0,0,0);controls.update();}
@@ -32,32 +43,56 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    ['Latitude',a.lat.toFixed(4)+'°'],['Longitude',a.lon.toFixed(4)+'°']
   ];
   $('#exodus-detail').innerHTML='<h2>'+escape(aircraftName(a))+'</h2><span class="demo-tag real-tag">PUBLIC ADS-B OBSERVATION</span><p class="exodus-note">Selected aircraft in the current regional snapshot. Callsign and other fields may be missing or inaccurate; no passenger information is available.</p><dl>'+items.map(([key,value])=>'<div><dt>'+escape(key)+'</dt><dd>'+escape(value)+'</dd></div>').join('')+'</dl><button type="button" id="exodus-clear-selection" class="secondary">Back to region overview ↗</button>';
-  $('#exodus-clear-selection').addEventListener('click',()=>{selectedIndex=-1;selection.visible=false;overview();});
+  $('#exodus-clear-selection').addEventListener('click',()=>{clearSelection();overview();});
  }
  function overview(){
   const region=regions[$('#exodus-region').value];
   $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-stat">'+aircraft.length.toLocaleString()+'</p><p class="exodus-note">Aircraft with reported positions within 150 nautical miles. Model filters are approximate; passenger identity and spraying activity cannot be determined. Click an aircraft marker to inspect it.</p><dl><div><dt>Source</dt><dd>adsb.lol</dd></div><div><dt>Retrieved</dt><dd>'+new Date(lastRefresh).toLocaleTimeString()+'</dd></div><div><dt>Anomaly baseline</dt><dd>Not established</dd></div><div><dt>Vessels</dt><dd>Not connected</dd></div><div><dt>Power grid</dt><dd>Not connected</dd></div></dl>';
  }
+ // Pick the closest visible on-screen dot in CSS pixels rather than using
+ // a fixed-size 3D raycasting threshold, which becomes inaccurate when zooming.
  function pick(event,host){
-  if(!active||!points.visible||!aircraft.length)return null;
+  if(!active||!points.visible||!visibleAircraft.length)return null;
   const rect=host.getBoundingClientRect();
-  pointer.set(((event.clientX-rect.left)/rect.width)*2-1,-((event.clientY-rect.top)/rect.height)*2+1);
-  raycaster.setFromCamera(pointer,camera);
-  const surface=raycaster.intersectObject(earth,false)[0];
-  const hit=raycaster.intersectObject(points,false).find(hit=>!surface||hit.distance<surface.distance+.04);
-  return hit?{index:hit.index,aircraft:visibleAircraft[hit.index]}:null;
+  const mx=event.clientX-rect.left,my=event.clientY-rect.top;
+  const limit=event.pointerType==='touch'?14:9;
+  let nearest=-1,best=limit*limit;
+  const positions=points.geometry.getAttribute('position');
+  if(!positions)return null;
+  camera.updateMatrixWorld();
+  earth.updateMatrixWorld();
+  for(let i=0;i<visibleAircraft.length;i++){
+   world.fromBufferAttribute(positions,i);
+   projected.copy(world).project(camera);
+   if(projected.z<-1||projected.z>1)continue;
+   const px=(projected.x+1)*rect.width/2;
+   const py=(1-projected.y)*rect.height/2;
+   const distanceSq=(px-mx)**2+(py-my)**2;
+   if(distanceSq>best)continue;
+   // Reject dots obscured by the globe on the far side of Earth.
+   direction.copy(world).sub(camera.position);
+   const toAircraft=direction.length();
+   raycaster.set(camera.position,direction.normalize());
+   raycaster.near=0;raycaster.far=toAircraft-.006;
+   if(raycaster.intersectObject(earth,false).length)continue;
+   best=distanceSq;nearest=i;
+  }
+  return nearest>=0?{index:nearest,aircraft:visibleAircraft[nearest]}:null;
  }
- function select(hit){if(!hit)return;selectedIndex=hit.index;const position=points.geometry.attributes.position;
-  selection.position.fromBufferAttribute(position,selectedIndex);selection.visible=true;info(hit.aircraft);
+ function select(hit){
+  if(!hit)return;
+  clearSelection();
+  selectedIndex=hit.index;
+  colorSelected(selectedIndex,true);
+  info(hit.aircraft);
  }
  function applyFilter(){
   const wanted=$('#aircraft-class').value;
   visibleAircraft=aircraft.filter(a=>wanted==='all'||classifyAircraft(a.t)===wanted);
-  selectedIndex=-1;selection.visible=false;
+  selectedIndex=-1;
   points.geometry.dispose();points.geometry=new THREE.BufferGeometry();
   const positions=new Float32Array(visibleAircraft.length*3);
   const colors=new Float32Array(visibleAircraft.length*3);
-  const palette={business:new THREE.Color('#f4c978'),agricultural:new THREE.Color('#96d4f4'),other:new THREE.Color('#7de3cf')};
   visibleAircraft.forEach((a,i)=>{
     positions.set(coord(a.lat,a.lon),i*3);
     const color=palette[classifyAircraft(a.t)];
@@ -91,6 +126,6 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  $('#exodus-region').addEventListener('change',update);
  $('#aircraft-class').addEventListener('change',applyFilter);
  $('#exodus-refresh').addEventListener('click',update);
- $('#aircraft-toggle').addEventListener('change',e=>{points.visible=active&&e.target.checked;selection.visible=points.visible&&selectedIndex>=0;});
- return {pick,select,setActive(next){active=next;points.visible=active&&$('#aircraft-toggle').checked;selection.visible=active&&selectedIndex>=0;if(!active){controller?.abort();return;}update();}};
+ $('#aircraft-toggle').addEventListener('change',e=>{points.visible=active&&e.target.checked;});
+ return {pick,select,setActive(next){active=next;points.visible=active&&$('#aircraft-toggle').checked;if(!active){controller?.abort();return;}update();}};
 }
