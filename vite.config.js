@@ -13,10 +13,10 @@ export default defineConfig(({mode})=>{
   },
   '/api/aircraft':{
    target:'https://api.adsb.lol',changeOrigin:true,secure:true,
-   rewrite:path=>path.replace(/^\\/api\\/aircraft(?=\\/)/,'/v2/point')
+   rewrite:path=>path.replace('/api/aircraft/','/v2/point/')
   }
  };
- if(origin&&/^https:\/\/[^\s]+$/.test(origin)){
+ if(origin&&origin.startsWith('https://')){
   proxy['/api/pattern-history']={
    target:origin,changeOrigin:true,secure:true,
    rewrite:path=>path.replace('/api/pattern-history/','/history?region=')
