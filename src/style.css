@@ -39,3 +39,9 @@ footer{align-items:flex-end}
 .footer-signoff a:hover{text-decoration:underline}
 .footer-version{display:block;margin-top:7px;font-size:9px;letter-spacing:.4px;color:#577185}
 @media(max-width:650px){footer{align-items:flex-start}.footer-signoff{max-width:52%}}
+
+/* Restrained airframe image inside existing inspector. */
+.exodus-photo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:92px;margin:13px 0 17px;padding:8px;background:#091522;border:1px solid #24394a;border-radius:8px;color:#7994a6;font-size:11px;text-align:center}
+.exodus-photo img{display:block;max-width:100%;max-height:144px;width:auto;height:auto;object-fit:contain;border-radius:5px}
+.exodus-photo a{display:block;max-width:100%}
+.exodus-photo-credit{font-size:9px;line-height:1.5;color:#8ca8b9}
