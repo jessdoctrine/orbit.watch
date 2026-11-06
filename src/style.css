@@ -11,3 +11,23 @@
 
 @media(min-width:1101px){.workspace{height:660px}.workspace>.panel{overflow-y:auto}.globe-panel{min-height:0}.details{scrollbar-width:thin}.filters{scrollbar-width:thin}}
 
+
+/* Exodus mode: reuse the existing restrained Orbit visual system. */
+.mode-switch{display:flex;gap:3px;margin-left:auto;padding:3px;border:1px solid #263848;border-radius:7px;background:#0b1723}
+.mode-button{border:0;background:transparent;border-radius:4px;color:#819bad;font:inherit;font-size:10px;letter-spacing:1.6px;padding:10px 15px}
+.mode-button.active{background:#173345;color:#7de3cf}
+header .badge{margin-left:0}
+[hidden]{display:none!important}
+.exodus-options{margin:14px 0 24px}
+.source-state{font-size:9px;letter-spacing:1px;color:#698397;margin-left:auto}
+.exodus-label{display:block;margin:28px 0 10px;font-size:10px;letter-spacing:1.4px;color:#91acbd}
+.exodus-select{width:100%;padding:11px;background:#09121c;border:1px solid #2a3d4e;border-radius:6px;color:#c7dae8;font-size:12px}
+#exodus-refresh{margin-top:16px;width:100%}
+.exodus-footnote{margin-top:18px;line-height:1.7}
+.exodus-links{display:flex;flex-direction:column;gap:11px;margin-top:22px;padding-top:20px;border-top:1px solid #20303e}
+.exodus-links a{color:#7de3cf;font-size:12px}
+.exodus-provenance{padding:24px;margin-top:24px}
+.exodus-provenance p.muted{line-height:1.8}
+.exodus-stat{font-size:30px;font-weight:450;color:#eff6fb;margin:16px 0}
+.exodus-note{font-size:11px;line-height:1.7;color:#91a9bc}
+@media(max-width:650px){header{gap:9px;padding:0 3%}.mode-button{padding:9px 8px;font-size:9px}.brand{letter-spacing:1px}.brand-icon{font-size:25px;margin-right:3px}header .badge{display:none}}
