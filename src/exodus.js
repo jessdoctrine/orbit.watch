@@ -1,5 +1,6 @@
 // Optional regional ADS-B layer. No synthetic aircraft or incident predictions.
 import {classifyAircraft,categoryLabel} from './aircraft-types.js';
+import {summarizeAircraft,appendSample,evaluatePattern,loadSamples,saveSamples,SAMPLE_INTERVAL_MS} from './patterns.js';
 const regions={
  nyc:{name:'New York',lat:40.71,lon:-74.01},
  la:{name:'Los Angeles',lat:34.05,lon:-118.24},
@@ -11,7 +12,8 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  const $=selector=>document.querySelector(selector);
  const points=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({vertexColors:true,size:5,sizeAttenuation:false,depthTest:true}));
  points.visible=false;scene.add(points);
- let active=false,controller=null,refreshToken=0,lastRefresh=0,aircraft=[],selectedIndex=-1,visibleAircraft=[],photoToken=0;
+ let active=false,controller=null,refreshToken=0,lastRefresh=0,aircraft=[],selectedIndex=-1,visibleAircraft=[],photoToken=0,refreshInterval=null;
+ let historical=loadSamples(localStorage);
  const raycaster=new THREE.Raycaster();
  const projected=new THREE.Vector3(),world=new THREE.Vector3(),direction=new THREE.Vector3();
  const selectedColor=new THREE.Color('#ffffff');
@@ -104,6 +106,16 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    if(token===photoToken&&target.isConnected)target.textContent='Aircraft photo service unavailable';
   }
  }
+ function renderPattern(regionId){
+  const current=summarizeAircraft(aircraft,regionId,lastRefresh||Date.now());
+  const result=evaluatePattern(historical,current);
+  $('#pattern-current').textContent=current.business.toLocaleString()+' observed';
+  const label=result.status==='building'?'BUILDING':result.status==='elevated'?'ELEVATED':'TYPICAL';
+  const status=$('#pattern-status');status.textContent=label;status.dataset.status=result.status;
+  $('#pattern-baseline').textContent=result.status==='building'?result.days+' / '+result.needed+' comparable past days':
+   'Typical at this local hour: '+result.baseline.toLocaleString()+' observed';
+  $('#pattern-explanation').textContent=result.message+' Samples are recorded on this device while Exodus is open; counts are not departures.';
+ }
  function overview(){
   const region=regions[$('#exodus-region').value];
   $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-stat">'+aircraft.length.toLocaleString()+'</p><p class="exodus-note">Aircraft with reported positions within 150 nautical miles. Model filters are approximate; passenger identity and spraying activity cannot be determined. Click an aircraft marker to inspect it.</p><dl><div><dt>Source</dt><dd>adsb.lol</dd></div><div><dt>Retrieved</dt><dd>'+new Date(lastRefresh).toLocaleTimeString()+'</dd></div><div><dt>Anomaly baseline</dt><dd>Not established</dd></div><div><dt>Vessels</dt><dd>Not connected</dd></div><div><dt>Power grid</dt><dd>Not connected</dd></div></dl>';
@@ -167,6 +179,8 @@ export function createExodus({THREE,scene,camera,earth,controls}){
   if(!active)return;
   controller?.abort();controller=new AbortController();const current=++refreshToken;
   const region=regions[$('#exodus-region').value];clear();focus(region);
+  $('#pattern-status').textContent='LOADING';$('#pattern-status').dataset.status='building';
+  $('#pattern-current').textContent='—';$('#pattern-baseline').textContent='Checking live observations…';
   $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-note">Checking public aircraft observations…</p>';
   try{
    const response=await fetch('/api/aircraft/'+region.lat+'/'+region.lon+'/150',{signal:controller.signal,headers:{Accept:'application/json'}});
@@ -175,10 +189,17 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    if(!Array.isArray(data.ac))throw new Error('Missing aircraft positions');
    const observed=data.ac.filter(a=>Number.isFinite(a.lat)&&Number.isFinite(a.lon));aircraft=observed;
    lastRefresh=Date.now();
+   const current=summarizeAircraft(aircraft,$('#exodus-region').value,lastRefresh);
+   const next=appendSample(historical,current);historical=next.samples;
+   if(next.added&&!saveSamples(localStorage,historical)){
+    $('#pattern-explanation').textContent='Browser storage is unavailable; observations will not persist.';
+   }
    applyFilter();
+   renderPattern($('#exodus-region').value);
   }catch(error){
    if(error.name==='AbortError'||current!==refreshToken)return;
    clear();$('#visible-count').textContent='AIRCRAFT FEED UNAVAILABLE';
+   $('#pattern-status').textContent='UNAVAILABLE';$('#pattern-current').textContent='—';$('#pattern-baseline').textContent='No current observation';
    $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-note">Live aircraft data could not be loaded. The public provider may reject browser requests, limit access, or be temporarily unavailable. No substitute flight counts are shown.</p><dl><div><dt>Vessels</dt><dd>Not connected</dd></div><div><dt>Power grid</dt><dd>Not connected</dd></div></dl>';
   }
  }
@@ -186,5 +207,12 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  $('#aircraft-class').addEventListener('change',applyFilter);
  $('#exodus-refresh').addEventListener('click',update);
  $('#aircraft-toggle').addEventListener('change',e=>{points.visible=active&&e.target.checked;});
- return {pick,select,setActive(next){active=next;points.visible=active&&$('#aircraft-toggle').checked;if(!active){controller?.abort();return;}update();}};
+ return {pick,select,setActive(next){
+  active=next;points.visible=active&&$('#aircraft-toggle').checked;
+  if(!active){controller?.abort();clearInterval(refreshInterval);refreshInterval=null;return;}
+  update();
+  // Only collect while the browser tab and Exodus mode are active.
+  clearInterval(refreshInterval);
+  refreshInterval=setInterval(()=>{if(active&&document.visibilityState==='visible')update();},SAMPLE_INTERVAL_MS);
+ }};
 }
