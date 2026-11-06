@@ -77,7 +77,7 @@ $('#reset').addEventListener('click',()=>{if(controls){camera.position.set(0,1.4
 function initScene(){
  const host=$('#scene');scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(38,1,.1,150);camera.position.set(0,1.4,4.7);
  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));host.appendChild(renderer.domElement);
- controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minDistance=1.25;controls.maxDistance=25;controls.enablePan=false;
+ controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.12;controls.rotateSpeed=.32;controls.zoomSpeed=.55;controls.minDistance=1.25;controls.maxDistance=25;controls.enablePan=false;
  scene.add(new THREE.AmbientLight(0xb4d3e9,1.5));const light=new THREE.DirectionalLight(0xffffff,2.5);light.position.set(-3,3,4);scene.add(light);
  const material=new THREE.MeshPhongMaterial({color:0x91b9c9,shininess:12});earth=new THREE.Mesh(new THREE.SphereGeometry(1,64,48),material);scene.add(earth);
  new THREE.TextureLoader().load('/earth.jpg',texture=>{texture.colorSpace=THREE.SRGBColorSpace;material.map=texture;material.color.set(0xffffff);material.needsUpdate=true;},undefined,()=>{ $('#globe-error').hidden=false;$('#globe-error').textContent='Earth imagery unavailable; showing an untextured globe.';});
@@ -92,12 +92,12 @@ function initScene(){
  for(const o of catalog){const target=new THREE.Object3D();target.userData=o;target.visible=false;pickTargets.push(target);}
  const resize=()=>{const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(THREE.MathUtils.degToRad(38)/2)/Math.min(camera.aspect,1)));camera.updateProjectionMatrix();};new ResizeObserver(resize).observe(host);resize();
  let down,lastHover=0;const tooltip=document.createElement('div');tooltip.className='object-tooltip';tooltip.hidden=true;host.appendChild(tooltip);
- const pick=e=>{if(activeMode!=='orbit')return null;const r=host.getBoundingClientRect();return pickObject({meshes:pickTargets,camera,earth,width:r.width,height:r.height,x:e.clientX-r.left,y:e.clientY-r.top,radius:e.pointerType==='touch'?22:10});};
+ const pick=e=>{if(activeMode==='exodus')return exodus?.pick(e,host)||null;const r=host.getBoundingClientRect();return pickObject({meshes:pickTargets,camera,earth,width:r.width,height:r.height,x:e.clientX-r.left,y:e.clientY-r.top,radius:e.pointerType==='touch'?22:10});};
  host.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];tooltip.hidden=true;});
- host.addEventListener('pointermove',e=>{if(e.buttons||performance.now()-lastHover<90)return;lastHover=performance.now();const hit=pick(e);host.style.cursor=hit?'pointer':'grab';tooltip.hidden=!hit;if(hit){const r=host.getBoundingClientRect();tooltip.textContent=`${hit.userData.name} · NORAD ${hit.userData.id}`;tooltip.style.left=`${Math.min(e.clientX-r.left+14,Math.max(8,r.width-240))}px`;tooltip.style.top=`${Math.max(8,e.clientY-r.top-40)}px`;}});
+ host.addEventListener('pointermove',e=>{if(e.buttons||performance.now()-lastHover<90)return;lastHover=performance.now();const hit=pick(e);host.style.cursor=hit?'pointer':'grab';tooltip.hidden=!hit;if(hit){const r=host.getBoundingClientRect();tooltip.textContent=activeMode==='exodus'?((hit.aircraft.flight||'').trim()||hit.aircraft.r||hit.aircraft.hex||'Aircraft'): `${hit.userData.name} · NORAD ${hit.userData.id}`;tooltip.style.left=`${Math.min(e.clientX-r.left+14,Math.max(8,r.width-240))}px`;tooltip.style.top=`${Math.max(8,e.clientY-r.top-40)}px`;}});
  host.addEventListener('pointerleave',()=>tooltip.hidden=true);host.addEventListener('pointercancel',()=>{down=null;tooltip.hidden=true;});
- host.addEventListener('pointerup',e=>{const start=down;down=null;if(!start||Math.hypot(e.clientX-start[0],e.clientY-start[1])>6)return;const hit=pick(e);if(hit){select(hit.userData);tooltip.hidden=true;}});
- exodus=createExodus({THREE,scene});
+ host.addEventListener('pointerup',e=>{const start=down;down=null;if(!start||Math.hypot(e.clientX-start[0],e.clientY-start[1])>6)return;const hit=pick(e);if(hit){if(activeMode==='exodus')exodus.select(hit);else select(hit.userData);tooltip.hidden=true;}});
+ exodus=createExodus({THREE,scene,camera,earth,controls});
  renderer.setAnimationLoop(()=>{controls.update();if(activeMode==='orbit'&&selected){const target=pickTargets[selected.index];selectionDot.visible=target?.visible||false;if(target)selectionDot.position.copy(target.position);}else{selectionDot.visible=false;}renderer.render(scene,camera);});
 }
 function switchMode(mode){
@@ -108,11 +108,12 @@ function switchMode(mode){
  document.querySelector('.intro .eyebrow').textContent=mode==='orbit'?'EDGECASE LABS / SPACE EXPLORER':'EDGECASE LABS / EXODUS WATCH';
  document.querySelector('.intro h1').textContent=mode==='orbit'?'Our planet.':'Patterns in motion.';
  document.querySelector('.globe-top>span').textContent=mode==='orbit'?'EARTH ORBITAL VIEW':'PUBLIC AIRCRAFT ACTIVITY';
- document.querySelector('.globe-bottom>span').textContent=mode==='orbit'?'Drag to rotate · Scroll to zoom · Click an object':'Drag to rotate · Scroll to zoom · Public coverage varies';
+ document.querySelector('.globe-bottom>span').textContent=mode==='orbit'?'Drag to rotate · Scroll to zoom · Click an object':'Drag slowly to rotate · Scroll to zoom · Click an aircraft';
  document.querySelector('#pause').hidden=mode==='exodus';
  for(const [id,g] of groups)g.points.visible=mode==='orbit'&&enabled.has(id);
  pickTargets.forEach(t=>t.visible=mode==='orbit'&&t.userData.positioned&&enabled.has(t.userData.category));
  if(orbitLine)orbitLine.visible=mode==='orbit'&&enabled.has(selected?.category);
+ if(mode==='exodus')selectionDot.visible=false;
  exodus?.setActive(mode==='exodus');
  if(mode==='exodus'){
   document.querySelector('#status-title').textContent='EXODUS · PUBLIC SIGNALS';
