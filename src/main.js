@@ -106,7 +106,7 @@ function switchMode(mode){
  document.querySelectorAll('.orbit-only').forEach(el=>el.hidden=mode!=='orbit');
  document.querySelectorAll('.exodus-only').forEach(el=>el.hidden=mode!=='exodus');
  document.querySelector('.intro .eyebrow').textContent=mode==='orbit'?'EDGECASE LABS / SPACE EXPLORER':'EDGECASE LABS / EXODUS WATCH';
- document.querySelector('.intro h1').textContent=mode==='orbit'?'Our planet.':'Patterns in motion.';
+ document.querySelector('.intro h1').textContent=mode==='orbit'?'Our planet.':'Global Patterns';
  document.querySelector('.globe-top>span').textContent=mode==='orbit'?'EARTH ORBITAL VIEW':'PUBLIC AIRCRAFT ACTIVITY';
  document.querySelector('.globe-bottom>span').textContent=mode==='orbit'?'Drag to rotate · Scroll to zoom · Click an object':'Drag slowly to rotate · Scroll to zoom · Click an aircraft';
  document.querySelector('#pause').hidden=mode==='exodus';
