@@ -118,7 +118,7 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  }
  function overview(){
   const region=regions[$('#exodus-region').value];
-  $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-stat">'+aircraft.length.toLocaleString()+'</p><p class="exodus-note">Aircraft with reported positions within 150 nautical miles. Model filters are approximate; passenger identity and spraying activity cannot be determined. Click an aircraft marker to inspect it.</p><dl><div><dt>Source</dt><dd>adsb.lol</dd></div><div><dt>Retrieved</dt><dd>'+new Date(lastRefresh).toLocaleTimeString()+'</dd></div><div><dt>Anomaly baseline</dt><dd>Not established</dd></div><div><dt>Vessels</dt><dd>Not connected</dd></div><div><dt>Power grid</dt><dd>Not connected</dd></div></dl>';
+  $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-stat">'+aircraft.length.toLocaleString()+'</p><p class="exodus-note">Aircraft with reported positions within 150 nautical miles. Model filters are approximate; passenger identity and spraying activity cannot be determined. Click an aircraft marker to inspect it.</p><dl><div><dt>Source</dt><dd>adsb.lol</dd></div><div><dt>Retrieved</dt><dd>'+new Date(lastRefresh).toLocaleTimeString()+'</dd></div><div><dt>Pattern baseline</dt><dd>See sidebar</dd></div><div><dt>Vessels</dt><dd>Not connected</dd></div><div><dt>Power grid</dt><dd>Not connected</dd></div></dl>';
  }
  // Pick the closest visible on-screen dot in CSS pixels rather than using
  // a fixed-size 3D raycasting threshold, which becomes inaccurate when zooming.
@@ -191,11 +191,10 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    lastRefresh=Date.now();
    const snapshot=summarizeAircraft(aircraft,$('#exodus-region').value,lastRefresh);
    const next=appendSample(historical,snapshot);historical=next.samples;
-   if(next.added&&!saveSamples(localStorage,historical)){
-    $('#pattern-explanation').textContent='Browser storage is unavailable; observations will not persist.';
-   }
+   const persisted=!next.added||saveSamples(localStorage,historical);
    applyFilter();
    renderPattern($('#exodus-region').value);
+   if(!persisted)$('#pattern-explanation').textContent='Browser storage unavailable; the baseline will not persist after this session.';
   }catch(error){
    if(error.name==='AbortError'||current!==refreshToken)return;
    clear();$('#visible-count').textContent='AIRCRAFT FEED UNAVAILABLE';
