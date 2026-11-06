@@ -5,7 +5,7 @@ export async function onRequestGet({params}){
  if(!/^[a-f0-9]{6}$/.test(hex))return new Response('Invalid aircraft identifier',{status:400});
  try{
   const upstream=await fetch('https://api.planespotters.net/pub/photos/hex/'+hex,{
-   headers:{Accept:'application/json'},cf:{cacheEverything:true,cacheTtl:3600}
+   headers:{Accept:'application/json','User-Agent':'EdgeCaseLabs-ExodusWatch/0.2 (Jess@edgecaselabs.info)'},cf:{cacheEverything:true,cacheTtl:3600}
   });
   if(!upstream.ok)return new Response(JSON.stringify({photos:[]}),{status:upstream.status===404?404:502,headers:{'Content-Type':'application/json'}});
   const body=await upstream.json();
