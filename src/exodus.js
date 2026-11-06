@@ -51,33 +51,49 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  // PlaneSpotters photos are airframe references, not evidence of present appearance.
  async function loadPhoto(a){
   const target=$('#exodus-photo');
-  const key=String(a.hex||'').trim().toLowerCase();
   if(!target)return;
-  if(!/^[a-f0-9]{6}$/.test(key)){
-   target.textContent='No verified aircraft photo available';
-   return;
-  }
+  const key=String(a.hex||'').trim().toLowerCase();
+  const registration=String(a.r||'').trim().toUpperCase();
   const token=++photoToken;
+  const request=async path=>{
+   const response=await fetch(path);
+   if(!response.ok)throw new Error('Photo provider returned '+response.status);
+   const data=await response.json();
+   return Array.isArray(data.photos)?data.photos[0]:null;
+  };
   try{
-   const response=await fetch('/api/aircraft-photo/'+key);
-   if(!response.ok)throw new Error('Photo lookup unavailable');
-   const result=await response.json();
+   let photo=null;
+   let unavailable=false;
+   if(/^[a-f0-9]{6}$/.test(key)){
+    try{photo=await request('/api/aircraft-photo/'+key);}catch{unavailable=true;}
+   }
+   // Registration is a secondary lookup only; a hex match is preferred.
+   if(!photo&&/^[A-Z0-9-]{2,12}$/.test(registration)){
+    try{photo=await request('/api/aircraft-photo-reg/'+encodeURIComponent(registration));}
+    catch{unavailable=true;}
+   }
    if(token!==photoToken||!target.isConnected)return;
-   const photo=Array.isArray(result.photos)?result.photos[0]:null;
    const src=photo?.thumbnail?.src;
    const link=photo?.link;
-   if(!src||!link)throw new Error('No matching photograph');
+   if(!src||!link){
+    target.textContent=unavailable?'Aircraft photo service unavailable':'No matching aircraft photograph found';
+    return;
+   }
    const imageUrl=new URL(src,location.href);
    const sourceUrl=new URL(link,location.href);
-   if(imageUrl.protocol!=='https:'||!imageUrl.hostname.endsWith('.planespotters.net')
-      ||sourceUrl.protocol!=='https:'||!(sourceUrl.hostname==='planespotters.net'||sourceUrl.hostname.endsWith('.planespotters.net')))throw new Error('Unrecognized photo host');
+   const allowedImageHost=['planespotters.net','plnspttrs.net'].some(host=>imageUrl.hostname===host||imageUrl.hostname.endsWith('.'+host));
+   const allowedLinkHost=sourceUrl.hostname==='planespotters.net'||sourceUrl.hostname.endsWith('.planespotters.net');
+   if(imageUrl.protocol!=='https:'||!allowedImageHost||sourceUrl.protocol!=='https:'||!allowedLinkHost){
+    target.textContent='Aircraft photo host unavailable';
+    return;
+   }
    target.textContent='';
    const anchor=document.createElement('a');
    anchor.href=sourceUrl.href;anchor.target='_blank';anchor.rel='noopener noreferrer';
-   anchor.title='View original photograph on Planespotters.net';
+   anchor.title='View source photograph on Planespotters.net';
    const img=document.createElement('img');
-   img.src=imageUrl.href;img.alt='Photograph associated with this aircraft registration';img.loading='lazy';
-   img.addEventListener('error',()=>{if(token===photoToken&&target.isConnected)target.textContent='Photo unavailable';});
+   img.src=imageUrl.href;img.alt='Archive photograph of the selected aircraft';img.loading='lazy';
+   img.addEventListener('error',()=>{if(token===photoToken&&target.isConnected)target.textContent='Photo could not be displayed';});
    anchor.appendChild(img);
    target.appendChild(anchor);
    const credit=document.createElement('small');
@@ -85,7 +101,7 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    credit.textContent='© '+(photo.photographer||'Photographer')+' · Planespotters.net · archival photo';
    target.appendChild(credit);
   }catch{
-   if(token===photoToken&&target.isConnected)target.textContent='No aircraft photo available';
+   if(token===photoToken&&target.isConnected)target.textContent='Aircraft photo service unavailable';
   }
  }
  function overview(){
