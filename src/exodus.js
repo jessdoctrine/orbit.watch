@@ -20,7 +20,7 @@ export function createExodus({THREE,scene}){
   const region=regions[$('#exodus-region').value];clear();
   $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-note">Checking public aircraft observations…</p>';
   try{
-   const response=await fetch('https://api.adsb.lol/v2/point/'+region.lat+'/'+region.lon+'/150',{signal:controller.signal,headers:{Accept:'application/json'}});
+   const response=await fetch('/api/aircraft/'+region.lat+'/'+region.lon+'/150',{signal:controller.signal,headers:{Accept:'application/json'}});
    if(!response.ok)throw new Error('HTTP '+response.status);
    const data=await response.json();if(current!==refreshToken||!active)return;
    if(!Array.isArray(data.ac))throw new Error('Missing aircraft positions');
