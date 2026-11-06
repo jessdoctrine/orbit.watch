@@ -11,7 +11,7 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  const $=selector=>document.querySelector(selector);
  const points=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({vertexColors:true,size:5,sizeAttenuation:false,depthTest:true}));
  points.visible=false;scene.add(points);
- let active=false,controller=null,refreshToken=0,lastRefresh=0,aircraft=[],selectedIndex=-1,visibleAircraft=[];
+ let active=false,controller=null,refreshToken=0,lastRefresh=0,aircraft=[],selectedIndex=-1,visibleAircraft=[],photoToken=0;
  const raycaster=new THREE.Raycaster();
  const projected=new THREE.Vector3(),world=new THREE.Vector3(),direction=new THREE.Vector3();
  const selectedColor=new THREE.Color('#ffffff');
@@ -24,10 +24,11 @@ export function createExodus({THREE,scene,camera,earth,controls}){
   attribute.needsUpdate=true;
  }
  function clearSelection(){
+  photoToken++;
   colorSelected(selectedIndex,false);selectedIndex=-1;
  }
  const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- function clear(){points.geometry.dispose();points.geometry=new THREE.BufferGeometry();aircraft=[];visibleAircraft=[];selectedIndex=-1;}
+ function clear(){photoToken++;points.geometry.dispose();points.geometry=new THREE.BufferGeometry();aircraft=[];visibleAircraft=[];selectedIndex=-1;}
  // Match the Orbit Watch texture convention: longitude 0 is +X; east is -Z.
  function coord(lat,lon){const phi=lat*Math.PI/180,lambda=lon*Math.PI/180;return [1.045*Math.cos(phi)*Math.cos(lambda),1.045*Math.sin(phi),-1.045*Math.cos(phi)*Math.sin(lambda)];}
  function focus(region){const distance=camera.position.length();const center=new THREE.Vector3(...coord(region.lat,region.lon)).normalize();camera.position.copy(center.multiplyScalar(distance));controls.target.set(0,0,0);controls.update();}
@@ -42,8 +43,50 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    ['Heading',Number.isFinite(a.track)?Math.round(a.track)+'°':'Unavailable'],
    ['Latitude',a.lat.toFixed(4)+'°'],['Longitude',a.lon.toFixed(4)+'°']
   ];
-  $('#exodus-detail').innerHTML='<h2>'+escape(aircraftName(a))+'</h2><span class="demo-tag real-tag">PUBLIC ADS-B OBSERVATION</span><p class="exodus-note">Selected aircraft in the current regional snapshot. Callsign and other fields may be missing or inaccurate; no passenger information is available.</p><dl>'+items.map(([key,value])=>'<div><dt>'+escape(key)+'</dt><dd>'+escape(value)+'</dd></div>').join('')+'</dl><button type="button" id="exodus-clear-selection" class="secondary">Back to region overview ↗</button>';
+  $('#exodus-detail').innerHTML='<h2>'+escape(aircraftName(a))+'</h2><div id="exodus-photo" class="exodus-photo"><span class="exodus-photo-placeholder">Checking for an aircraft photo…</span></div><span class="demo-tag real-tag">PUBLIC ADS-B OBSERVATION</span><p class="exodus-note">Selected aircraft in the current regional snapshot. Callsign and other fields may be missing or inaccurate; no passenger information is available.</p><dl>'+items.map(([key,value])=>'<div><dt>'+escape(key)+'</dt><dd>'+escape(value)+'</dd></div>').join('')+'</dl><button type="button" id="exodus-clear-selection" class="secondary">Back to region overview ↗</button>';
   $('#exodus-clear-selection').addEventListener('click',()=>{clearSelection();overview();});
+  loadPhoto(a);
+ }
+ // Photos are requested only on selection, not for every aircraft in a region.
+ // PlaneSpotters photos are airframe references, not evidence of present appearance.
+ async function loadPhoto(a){
+  const target=$('#exodus-photo');
+  const key=String(a.hex||'').trim().toLowerCase();
+  if(!target)return;
+  if(!/^[a-f0-9]{6}$/.test(key)){
+   target.textContent='No verified aircraft photo available';
+   return;
+  }
+  const token=++photoToken;
+  try{
+   const response=await fetch('/api/aircraft-photo/'+key);
+   if(!response.ok)throw new Error('Photo lookup unavailable');
+   const result=await response.json();
+   if(token!==photoToken||!target.isConnected)return;
+   const photo=Array.isArray(result.photos)?result.photos[0]:null;
+   const src=photo?.thumbnail?.src;
+   const link=photo?.link;
+   if(!src||!link)throw new Error('No matching photograph');
+   const imageUrl=new URL(src,location.href);
+   const sourceUrl=new URL(link,location.href);
+   if(imageUrl.protocol!=='https:'||!imageUrl.hostname.endsWith('.planespotters.net')
+      ||sourceUrl.protocol!=='https:'||!(sourceUrl.hostname==='planespotters.net'||sourceUrl.hostname.endsWith('.planespotters.net')))throw new Error('Unrecognized photo host');
+   target.textContent='';
+   const anchor=document.createElement('a');
+   anchor.href=sourceUrl.href;anchor.target='_blank';anchor.rel='noopener noreferrer';
+   anchor.title='View original photograph on Planespotters.net';
+   const img=document.createElement('img');
+   img.src=imageUrl.href;img.alt='Photograph associated with this aircraft registration';img.loading='lazy';
+   img.addEventListener('error',()=>{if(token===photoToken&&target.isConnected)target.textContent='Photo unavailable';});
+   anchor.appendChild(img);
+   target.appendChild(anchor);
+   const credit=document.createElement('small');
+   credit.className='exodus-photo-credit';
+   credit.textContent='© '+(photo.photographer||'Photographer')+' · Planespotters.net · archival photo';
+   target.appendChild(credit);
+  }catch{
+   if(token===photoToken&&target.isConnected)target.textContent='No aircraft photo available';
+  }
  }
  function overview(){
   const region=regions[$('#exodus-region').value];
@@ -89,7 +132,7 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  function applyFilter(){
   const wanted=$('#aircraft-class').value;
   visibleAircraft=aircraft.filter(a=>wanted==='all'||classifyAircraft(a.t)===wanted);
-  selectedIndex=-1;
+  selectedIndex=-1;photoToken++;
   points.geometry.dispose();points.geometry=new THREE.BufferGeometry();
   const positions=new Float32Array(visibleAircraft.length*3);
   const colors=new Float32Array(visibleAircraft.length*3);
