@@ -49,10 +49,10 @@ function renderRows(){
  $('#rows').innerHTML=rows.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE).map(o=>`<tr class="${selected?.id===o.id?'selected':''}"><td><span class="dot" style="--color:${category(o.category).color}"></span>${escape(o.name)}</td><td>${category(o.category).name}</td><td>${escape(o.owner)}</td><td>${escape(o.id)}</td><td data-altitude="${o.index}">${altitude(o)}</td><td><button class="inspect" data-id="${escape(o.id)}" aria-label="Inspect ${escape(o.name)}">Inspect ↗</button></td></tr>`).join('')||'<tr><td colspan="6">No matching objects. Try another search or enable more layers.</td></tr>';
  $('#result-count').textContent=`${format(rows.length)} matching / ${format(catalog.length)} cataloged objects · Showing ${rows.length?page*PAGE_SIZE+1:0}–${Math.min((page+1)*PAGE_SIZE,rows.length)}`;
  $('#previous').disabled=page===0;$('#next').disabled=(page+1)*PAGE_SIZE>=rows.length;
- $('#visible-count').textContent=`${format(pickTargets.filter(t=>t.visible).length)} PLOTTED`;
+ if(activeMode==='orbit')$('#visible-count').textContent=`${format(pickTargets.filter(t=>t.visible).length)} PLOTTED`;
 }
 function updateStatus(){
- if(!manifest)return;
+ if(!manifest||activeMode!=='orbit')return;
  const ageHours=(Date.now()-Math.min(...Object.values(manifest.downloadedAt).map(Date.parse)))/3600000;
  $('#status-title').textContent=paused?'POSITIONS PAUSED':ageHours>24?'SAVED DATA · STALE':'CELESTRAK ORBITAL DATA';
  $('#status-detail').textContent=positionsTime?`${utc(positionsTime)} · SGP4 estimates`:'Calculating positions…';
@@ -130,7 +130,7 @@ function receivePositions({data}){
   g.members.forEach((o,j)=>{if(o.positioned)g.buffer.set(data.positions.subarray(o.index*3,o.index*3+3),j*3);else g.buffer.set([1e6,1e6,1e6],j*3);});
   g.points.geometry.attributes.position.needsUpdate=true;
  }
- if(firstPositions){detail();renderRows();}else{if(selected){const alt=$('[data-live="altitude"]');if(alt)alt.textContent=altitude(selected);const timestamp=$('[data-live="time"]');if(timestamp)timestamp.textContent=utc(positionsTime);}for(const cell of document.querySelectorAll('#rows td[data-altitude]')){const o=catalog[Number(cell.dataset.altitude)];cell.textContent=altitude(o);}}$("#visible-count").textContent=`${format(pickTargets.filter(t=>t.visible).length)} PLOTTED`;if(activeMode==='orbit')updateStatus();
+ if(firstPositions){detail();renderRows();}else{if(selected){const alt=$('[data-live="altitude"]');if(alt)alt.textContent=altitude(selected);const timestamp=$('[data-live="time"]');if(timestamp)timestamp.textContent=utc(positionsTime);}for(const cell of document.querySelectorAll('#rows td[data-altitude]')){const o=catalog[Number(cell.dataset.altitude)];cell.textContent=altitude(o);}}if(activeMode==='orbit')$("#visible-count").textContent=`${format(pickTargets.filter(t=>t.visible).length)} PLOTTED`;if(activeMode==='orbit')updateStatus();
 }
 async function start(){
  $('#detail').textContent='Loading CelesTrak catalog…';
