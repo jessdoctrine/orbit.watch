@@ -189,8 +189,8 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    if(!Array.isArray(data.ac))throw new Error('Missing aircraft positions');
    const observed=data.ac.filter(a=>Number.isFinite(a.lat)&&Number.isFinite(a.lon));aircraft=observed;
    lastRefresh=Date.now();
-   const current=summarizeAircraft(aircraft,$('#exodus-region').value,lastRefresh);
-   const next=appendSample(historical,current);historical=next.samples;
+   const snapshot=summarizeAircraft(aircraft,$('#exodus-region').value,lastRefresh);
+   const next=appendSample(historical,snapshot);historical=next.samples;
    if(next.added&&!saveSamples(localStorage,historical)){
     $('#pattern-explanation').textContent='Browser storage is unavailable; observations will not persist.';
    }
