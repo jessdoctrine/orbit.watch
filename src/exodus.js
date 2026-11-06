@@ -13,7 +13,7 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  const points=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({vertexColors:true,size:5,sizeAttenuation:false,depthTest:true}));
  points.visible=false;scene.add(points);
  let active=false,controller=null,refreshToken=0,lastRefresh=0,aircraft=[],selectedIndex=-1,visibleAircraft=[],photoToken=0,refreshInterval=null;
- let historical=loadSamples(localStorage);
+ let historical=loadSamples(localStorage),cloudHistorical=[],cloudConnected=false,cloudRequest=0;
  const raycaster=new THREE.Raycaster();
  const projected=new THREE.Vector3(),world=new THREE.Vector3(),direction=new THREE.Vector3();
  const selectedColor=new THREE.Color('#ffffff');
@@ -108,13 +108,31 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  }
  function renderPattern(regionId){
   const current=summarizeAircraft(aircraft,regionId,lastRefresh||Date.now());
-  const result=evaluatePattern(historical,current);
+  const data=cloudConnected?cloudHistorical:historical;
+  const result=evaluatePattern(data,current);
   $('#pattern-current').textContent=current.business.toLocaleString()+' observed';
   const label=result.status==='building'?'BUILDING':result.status==='elevated'?'ELEVATED':'TYPICAL';
   const status=$('#pattern-status');status.textContent=label;status.dataset.status=result.status;
   $('#pattern-baseline').textContent=result.status==='building'?result.days+' / '+result.needed+' comparable past days':
    'Typical at this local hour: '+result.baseline.toLocaleString()+' observed';
-  $('#pattern-explanation').textContent=result.message+' Samples are recorded on this device while Exodus is open; counts are not departures.';
+  $('#pattern-explanation').textContent=result.message+' Source: '+(cloudConnected?'24/7 cloud snapshots':'this browser while Exodus is open')+'. Counts are not departures.';
+ }
+ async function loadCloudHistory(regionId){
+  const token=++cloudRequest;
+  cloudConnected=false;cloudHistorical=[];
+  try{
+   const response=await fetch('/api/pattern-history/'+regionId,{headers:{Accept:'application/json'}});
+   if(!response.ok)throw new Error('Cloud history not configured');
+   const body=await response.json();
+   if(token!==cloudRequest||regionId!==$('#exodus-region').value)return;
+   if(body.region!==regionId||!Array.isArray(body.samples))throw new Error('Invalid history');
+   cloudHistorical=body.samples;
+   cloudConnected=true;
+  }catch{
+   if(token!==cloudRequest)return;
+   cloudHistorical=[];cloudConnected=false;
+  }
+  if(active&&regionId===$('#exodus-region').value&&aircraft.length)renderPattern(regionId);
  }
  function overview(){
   const region=regions[$('#exodus-region').value];
@@ -178,7 +196,8 @@ export function createExodus({THREE,scene,camera,earth,controls}){
  async function update(){
   if(!active)return;
   controller?.abort();controller=new AbortController();const current=++refreshToken;
-  const region=regions[$('#exodus-region').value];clear();focus(region);
+  const regionId=$('#exodus-region').value,region=regions[regionId];clear();focus(region);
+  loadCloudHistory(regionId);
   $('#pattern-status').textContent='LOADING';$('#pattern-status').dataset.status='building';
   $('#pattern-current').textContent='—';$('#pattern-baseline').textContent='Checking live observations…';
   $('#exodus-detail').innerHTML='<h2>'+escape(region.name)+'</h2><p class="exodus-note">Checking public aircraft observations…</p>';
@@ -194,7 +213,7 @@ export function createExodus({THREE,scene,camera,earth,controls}){
    const persisted=!next.added||saveSamples(localStorage,historical);
    applyFilter();
    renderPattern($('#exodus-region').value);
-   if(!persisted)$('#pattern-explanation').textContent='Browser storage unavailable; the baseline will not persist after this session.';
+   if(!persisted&&!cloudConnected)$('#pattern-explanation').textContent='Browser storage unavailable; the baseline will not persist after this session.';
   }catch(error){
    if(error.name==='AbortError'||current!==refreshToken)return;
    clear();$('#visible-count').textContent='AIRCRAFT FEED UNAVAILABLE';
