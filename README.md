@@ -1,6 +1,6 @@
 # Orbit Watch
 
-A standalone 3D Earth and orbital-object explorer by EdgeCase Labs, using GitHub, Three.js, Vite, and Satellite.js. No Sites project is used.
+A standalone 3D Earth and orbital-object explorer by EdgeCase Labs, using GitHub, Three.js, Vite, and Satellite.js.
 
 ## Run locally
 
