@@ -4,6 +4,7 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {categories,makeObject} from './catalog.js';
 import {makeSatrec,calculate} from './orbits.js';
 import {pickObject} from './picking.js';
+import {createExodus} from './exodus.js';
 
 const $=s=>document.querySelector(s);
 const escape=value=>String(value??'Unknown').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13,7 +14,8 @@ const category=id=>categories.find(c=>c.id===id);
 const enabled=new Set(categories.map(c=>c.id));
 let catalog=[],selected=null,manifest,worker,positionsTime=null;
 let paused=matchMedia('(prefers-reduced-motion: reduce)').matches,failed=0,page=0;
-let scene,camera,renderer,controls,earth,orbitLine,selectionDot;
+let scene,camera,renderer,controls,earth,orbitLine,selectionDot,exodus;
+let activeMode="orbit";
 const groups=new Map(),pickTargets=[],PAGE_SIZE=100;
 const statuses={'+':'Operational','-':'Nonoperational','P':'Partially operational','B':'Backup / standby','S':'Spare','X':'Extended mission','D':'Decayed','?':'Unknown'};
 const altitude=o=>Number.isFinite(o.altitude)?`${Math.round(o.altitude).toLocaleString()} km`:'Unavailable';
@@ -61,9 +63,9 @@ function updatePause(){
 }
 $('#layers').addEventListener('change',e=>{
  const {value,checked}=e.target;checked?enabled.add(value):enabled.delete(value);
- for(const [id,g] of groups)g.points.visible=enabled.has(id);
- pickTargets.forEach(t=>t.visible=t.userData.positioned&&enabled.has(t.userData.category));
- if(orbitLine)orbitLine.visible=enabled.has(selected.category);page=0;renderRows();
+ for(const [id,g] of groups)g.points.visible=activeMode==='orbit'&&enabled.has(id);
+ pickTargets.forEach(t=>t.visible=activeMode==='orbit'&&t.userData.positioned&&enabled.has(t.userData.category));
+ if(orbitLine)orbitLine.visible=activeMode==='orbit'&&enabled.has(selected.category);page=0;renderRows();
 });
 $('#search').addEventListener('input',()=>{page=0;renderRows();});
 $('#rows').addEventListener('click',e=>{const b=e.target.closest('[data-id]');if(b)select(catalog.find(o=>o.id===b.dataset.id));});
@@ -90,24 +92,45 @@ function initScene(){
  for(const o of catalog){const target=new THREE.Object3D();target.userData=o;target.visible=false;pickTargets.push(target);}
  const resize=()=>{const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(THREE.MathUtils.degToRad(38)/2)/Math.min(camera.aspect,1)));camera.updateProjectionMatrix();};new ResizeObserver(resize).observe(host);resize();
  let down,lastHover=0;const tooltip=document.createElement('div');tooltip.className='object-tooltip';tooltip.hidden=true;host.appendChild(tooltip);
- const pick=e=>{const r=host.getBoundingClientRect();return pickObject({meshes:pickTargets,camera,earth,width:r.width,height:r.height,x:e.clientX-r.left,y:e.clientY-r.top,radius:e.pointerType==='touch'?22:10});};
+ const pick=e=>{if(activeMode!=='orbit')return null;const r=host.getBoundingClientRect();return pickObject({meshes:pickTargets,camera,earth,width:r.width,height:r.height,x:e.clientX-r.left,y:e.clientY-r.top,radius:e.pointerType==='touch'?22:10});};
  host.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];tooltip.hidden=true;});
  host.addEventListener('pointermove',e=>{if(e.buttons||performance.now()-lastHover<90)return;lastHover=performance.now();const hit=pick(e);host.style.cursor=hit?'pointer':'grab';tooltip.hidden=!hit;if(hit){const r=host.getBoundingClientRect();tooltip.textContent=`${hit.userData.name} · NORAD ${hit.userData.id}`;tooltip.style.left=`${Math.min(e.clientX-r.left+14,Math.max(8,r.width-240))}px`;tooltip.style.top=`${Math.max(8,e.clientY-r.top-40)}px`;}});
  host.addEventListener('pointerleave',()=>tooltip.hidden=true);host.addEventListener('pointercancel',()=>{down=null;tooltip.hidden=true;});
  host.addEventListener('pointerup',e=>{const start=down;down=null;if(!start||Math.hypot(e.clientX-start[0],e.clientY-start[1])>6)return;const hit=pick(e);if(hit){select(hit.userData);tooltip.hidden=true;}});
- renderer.setAnimationLoop(()=>{controls.update();if(selected){const target=pickTargets[selected.index];selectionDot.visible=target?.visible||false;if(target)selectionDot.position.copy(target.position);}renderer.render(scene,camera);});
+ exodus=createExodus({THREE,scene});
+ renderer.setAnimationLoop(()=>{controls.update();if(activeMode==='orbit'&&selected){const target=pickTargets[selected.index];selectionDot.visible=target?.visible||false;if(target)selectionDot.position.copy(target.position);}else{selectionDot.visible=false;}renderer.render(scene,camera);});
 }
+function switchMode(mode){
+ activeMode=mode;
+ document.querySelectorAll('.mode-button').forEach(button=>{const active=button.dataset.mode===mode;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
+ document.querySelectorAll('.orbit-only').forEach(el=>el.hidden=mode!=='orbit');
+ document.querySelectorAll('.exodus-only').forEach(el=>el.hidden=mode!=='exodus');
+ document.querySelector('.intro .eyebrow').textContent=mode==='orbit'?'EDGECASE LABS / SPACE EXPLORER':'EDGECASE LABS / EXODUS WATCH';
+ document.querySelector('.intro h1').textContent=mode==='orbit'?'Our planet.':'Patterns in motion.';
+ document.querySelector('.globe-top>span').textContent=mode==='orbit'?'EARTH ORBITAL VIEW':'PUBLIC AIRCRAFT ACTIVITY';
+ document.querySelector('.globe-bottom>span').textContent=mode==='orbit'?'Drag to rotate · Scroll to zoom · Click an object':'Drag to rotate · Scroll to zoom · Public coverage varies';
+ document.querySelector('#pause').hidden=mode==='exodus';
+ for(const [id,g] of groups)g.points.visible=mode==='orbit'&&enabled.has(id);
+ pickTargets.forEach(t=>t.visible=mode==='orbit'&&t.userData.positioned&&enabled.has(t.userData.category));
+ if(orbitLine)orbitLine.visible=mode==='orbit'&&enabled.has(selected?.category);
+ exodus?.setActive(mode==='exodus');
+ if(mode==='exodus'){
+  document.querySelector('#status-title').textContent='EXODUS · PUBLIC SIGNALS';
+  document.querySelector('#status-detail').textContent='Aircraft observations · vessels and grid pending';
+ }else updateStatus();
+}
+document.querySelectorAll('.mode-button').forEach(button=>button.addEventListener('click',()=>switchMode(button.dataset.mode)));
 function receivePositions({data}){
  if(paused&&positionsTime)return;
  const firstPositions=positionsTime===null;positionsTime=data.time;failed=data.failed;
  catalog.forEach((o,i)=>{o.altitude=Number.isFinite(data.altitudes[i])?data.altitudes[i]:null;o.positioned=o.altitude!==null;
-  const t=pickTargets[i];if(t){t.visible=o.positioned&&enabled.has(o.category);if(o.positioned)t.position.fromArray(data.positions,i*3);}
+  const t=pickTargets[i];if(t){t.visible=activeMode==='orbit'&&o.positioned&&enabled.has(o.category);if(o.positioned)t.position.fromArray(data.positions,i*3);}
  });
  for(const g of groups.values()){
   g.members.forEach((o,j)=>{if(o.positioned)g.buffer.set(data.positions.subarray(o.index*3,o.index*3+3),j*3);else g.buffer.set([1e6,1e6,1e6],j*3);});
   g.points.geometry.attributes.position.needsUpdate=true;
  }
- if(firstPositions){detail();renderRows();}else{if(selected){const alt=$('[data-live="altitude"]');if(alt)alt.textContent=altitude(selected);const timestamp=$('[data-live="time"]');if(timestamp)timestamp.textContent=utc(positionsTime);}for(const cell of document.querySelectorAll('#rows td[data-altitude]')){const o=catalog[Number(cell.dataset.altitude)];cell.textContent=altitude(o);}}$("#visible-count").textContent=`${format(pickTargets.filter(t=>t.visible).length)} PLOTTED`;updateStatus();
+ if(firstPositions){detail();renderRows();}else{if(selected){const alt=$('[data-live="altitude"]');if(alt)alt.textContent=altitude(selected);const timestamp=$('[data-live="time"]');if(timestamp)timestamp.textContent=utc(positionsTime);}for(const cell of document.querySelectorAll('#rows td[data-altitude]')){const o=catalog[Number(cell.dataset.altitude)];cell.textContent=altitude(o);}}$("#visible-count").textContent=`${format(pickTargets.filter(t=>t.visible).length)} PLOTTED`;if(activeMode==='orbit')updateStatus();
 }
 async function start(){
  $('#detail').textContent='Loading CelesTrak catalog…';
