@@ -1,0 +1,42 @@
+name: Refresh CelesTrak catalog
+
+on:
+  schedule:
+    # 00:17 and 12:17 UTC (twice daily; avoids the top-of-hour rush).
+    - cron: "17 0,12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: celestrak-catalog-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out production branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download and validate orbital data
+        run: python scripts/update_data.py
+      - name: Commit and publish refreshed catalog
+        run: |
+          git add public/data/catalog.json
+          if git diff --cached --quiet; then
+            echo "Catalog unchanged; nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "data: refresh CelesTrak orbital catalog"
+          git push origin HEAD:main
