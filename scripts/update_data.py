@@ -1,5 +1,6 @@
 """Explicit snapshot refresh. Each source is cached for at least two hours."""
-import csv, json, os, time, urllib.request
+import csv, json, os, time, urllib.request, urllib.error
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,19 +13,34 @@ SOURCES = {
  'satcat.csv':'https://celestrak.org/pub/satcat.csv',
 }
 def iso(t): return datetime.fromtimestamp(t, timezone.utc).isoformat().replace('+00:00','Z')
+def download(name, url):
+ request=urllib.request.Request(url,headers={'User-Agent':'OrbitWatch/0.2'})
+ for attempt in range(3):
+  try:
+   with urllib.request.urlopen(request,timeout=90) as response:
+    if response.status!=200: raise RuntimeError(f'{name}: HTTP {response.status}')
+    return response.read()
+  except urllib.error.HTTPError as exc:
+   if exc.code not in (408, 500, 502, 503, 504): raise
+   error=exc
+  except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+   error=exc
+  logging.warning('%s: download attempt %s/3 failed: %s',name,attempt+1,error)
+  if attempt==2: raise error
+  time.sleep(30 * 2**attempt)
+
 def update():
  CACHE.mkdir(parents=True,exist_ok=True); OUT.mkdir(parents=True,exist_ok=True)
  for name,url in SOURCES.items():
   dest=CACHE/name; initial=OUT/name
   if initial.exists() and not dest.exists():
    assert initial.resolve().is_relative_to(ROOT) and dest.resolve().is_relative_to(ROOT)
-   initial.rename(dest)
+   import shutil
+   shutil.copy2(initial,dest)
   if dest.exists() and time.time()-dest.stat().st_mtime<7200: continue
-  request=urllib.request.Request(url,headers={'User-Agent':'OrbitWatch/0.2'})
-  # Errors stop the run. Never overwrite a usable snapshot with an error response.
-  with urllib.request.urlopen(request,timeout=90) as response:
-   if response.status!=200: raise RuntimeError(f'{name}: HTTP {response.status}')
-   body=response.read()
+  # A failed refresh must leave the published catalog untouched.
+  body=download(name,url)
+  logging.info('%s: downloaded %s bytes; validating',name,len(body))
   if name.endswith('.json'):
    rows=json.loads(body)
    if not isinstance(rows,list) or not rows or 'NORAD_CAT_ID' not in rows[0]: raise ValueError(f'Invalid response: {name}')
@@ -44,4 +60,6 @@ def update():
  manifest={'provider':'CelesTrak','assembledAt':iso(time.time()),'downloadedAt':{n:iso((CACHE/n).stat().st_mtime) for n in SOURCES},'sources':SOURCES,'sourceCounts':counts,'count':len(records),'oldestEpoch':epochs[0]+'Z','newestEpoch':epochs[-1]+'Z','coverage':'Active group plus names containing DEB or R/B; deduplicated by NORAD ID. Not the complete catalog. Some inactive, unnamed, restricted, and untracked objects are absent.'}
  temp=OUT/'catalog.tmp';temp.write_text(json.dumps({'manifest':manifest,'records':list(records.values())},separators=(',',':')),encoding='utf-8');os.replace(temp,OUT/'catalog.json')
  print(json.dumps(manifest,indent=2))
-if __name__=='__main__':update()
+if __name__=='__main__':
+ logging.basicConfig(level=logging.INFO,format='%(levelname)s: %(message)s')
+ update()
